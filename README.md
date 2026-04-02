@@ -21,6 +21,4 @@ Because this software strictly adheres to standard built-in Python libraries, yo
 python analyze.py
 ```
 
-## 📦 Requirements
-This tool is built on **Zero External Dependencies**. All dependencies utilized are part of the standard Python 3 Library.
-(See `requirements.txt` for more context).
+
