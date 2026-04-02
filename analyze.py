@@ -24,41 +24,50 @@ class AnalyzerApp:
         
         self.current_sort_col = "Size"
         self.sort_descending = True
+        self.is_dark = False
+        
+        # We need Tkinter variables for trace after basic root is made
+        self.path_var = tk.StringVar()
+        self.filter_var = tk.StringVar()
+        self.status_var = tk.StringVar(value="Ready. Select a directory to begin.")
         
         self.setup_ui()
+        self.apply_theme("light")
         
     def setup_ui(self):
-        # Top Frame (Controls)
-        top_frame = ttk.Frame(self.root, padding=10)
-        top_frame.pack(fill=tk.X)
-        top_frame.columnconfigure(1, weight=1)
+        # We must keep references to frames so we can change their background if necessary in Tkinter
+        self.style = ttk.Style()
+        self.style.theme_use('clam') # Clam is the easiest built-in theme to reskin
+        
+        # Main structure
+        self.top_frame = ttk.Frame(self.root, padding=10)
+        self.top_frame.pack(fill=tk.X)
+        self.top_frame.columnconfigure(1, weight=1)
         
         # Row 0: Directory Selection
-        ttk.Label(top_frame, text="Directory:").grid(row=0, column=0, padx=(0,5), pady=5, sticky=tk.W)
-        
-        self.path_var = tk.StringVar()
-        self.path_entry = ttk.Entry(top_frame, textvariable=self.path_var)
+        ttk.Label(self.top_frame, text="Directory:").grid(row=0, column=0, padx=(0,5), pady=5, sticky=tk.W)
+        self.path_entry = ttk.Entry(self.top_frame, textvariable=self.path_var)
         self.path_entry.grid(row=0, column=1, padx=(0,5), pady=5, sticky=tk.EW)
         
-        ttk.Button(top_frame, text="Browse...", command=self.browse_folder).grid(row=0, column=2, padx=(0,5), pady=5)
-        self.analyze_btn = ttk.Button(top_frame, text="Analyze", command=self.start_analysis)
+        ttk.Button(self.top_frame, text="Browse...", command=self.browse_folder).grid(row=0, column=2, padx=(0,5), pady=5)
+        self.analyze_btn = ttk.Button(self.top_frame, text="Analyze", command=self.start_analysis)
         self.analyze_btn.grid(row=0, column=3, pady=5)
         
+        self.theme_btn = ttk.Button(self.top_frame, text="🌙 Dark", width=8, command=self.toggle_theme)
+        self.theme_btn.grid(row=0, column=4, padx=(10,0), pady=5)
+        
         # Row 1: Search/Filter
-        ttk.Label(top_frame, text="Filter (Name/Type):").grid(row=1, column=0, padx=(0,5), pady=5, sticky=tk.W)
-        self.filter_var = tk.StringVar()
+        ttk.Label(self.top_frame, text="Filter (Name/Type):").grid(row=1, column=0, padx=(0,5), pady=5, sticky=tk.W)
         self.filter_var.trace_add("write", self.on_filter_changed)
-        self.filter_entry = ttk.Entry(top_frame, textvariable=self.filter_var)
-        self.filter_entry.grid(row=1, column=1, columnspan=3, pady=5, sticky=tk.EW)
+        self.filter_entry = ttk.Entry(self.top_frame, textvariable=self.filter_var)
+        self.filter_entry.grid(row=1, column=1, columnspan=4, pady=5, sticky=tk.EW)
         
         # Middle Frame (Treeview)
-        mid_frame = ttk.Frame(self.root, padding="10 0 10 10")
-        mid_frame.pack(fill=tk.BOTH, expand=True)
+        self.mid_frame = ttk.Frame(self.root, padding="10 0 10 10")
+        self.mid_frame.pack(fill=tk.BOTH, expand=True)
         
         columns = ("Name", "Type", "Size")
-        self.tree = ttk.Treeview(mid_frame, columns=columns, show="headings")
-        
-        # Double click to open folder/file
+        self.tree = ttk.Treeview(self.mid_frame, columns=columns, show="headings")
         self.tree.bind("<Double-1>", self.on_double_click)
         
         self.tree.heading("Name", text="Name", command=lambda: self.sort_tree("Name"))
@@ -69,21 +78,58 @@ class AnalyzerApp:
         self.tree.column("Type", width=120, anchor=tk.CENTER)
         self.tree.column("Size", width=120, anchor=tk.E)
         
-        scrollbar = ttk.Scrollbar(mid_frame, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscroll=scrollbar.set)
+        self.scrollbar = ttk.Scrollbar(self.mid_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscroll=self.scrollbar.set)
         
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # Bottom Frame (Status and Actions)
-        bottom_frame = ttk.Frame(self.root, padding=10)
-        bottom_frame.pack(fill=tk.X)
+        self.bottom_frame = ttk.Frame(self.root, padding=10)
+        self.bottom_frame.pack(fill=tk.X)
         
-        self.status_var = tk.StringVar(value="Ready. Select a directory to begin.")
-        ttk.Label(bottom_frame, textvariable=self.status_var).pack(side=tk.LEFT)
+        ttk.Label(self.bottom_frame, textvariable=self.status_var).pack(side=tk.LEFT)
+        ttk.Button(self.bottom_frame, text="Export JSON Report", command=self.export_report).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(self.bottom_frame, text="Open Reports Folder", command=self.open_reports_folder).pack(side=tk.RIGHT)
         
-        ttk.Button(bottom_frame, text="Export JSON Report", command=self.export_report).pack(side=tk.RIGHT, padx=(5, 0))
-        ttk.Button(bottom_frame, text="Open Reports Folder", command=self.open_reports_folder).pack(side=tk.RIGHT)
+    def toggle_theme(self):
+        new_mode = "light" if self.is_dark else "dark"
+        self.apply_theme(new_mode)
+        
+    def apply_theme(self, mode):
+        self.is_dark = (mode == "dark")
+        if self.is_dark:
+            bg_col = "#2b2b2b"
+            fg_col = "#ffffff"
+            entry_bg = "#3b3b3b"
+            tree_bg = "#333333"
+            select_bg = "#005a9e"
+            btn_bg = "#555555"
+            btn_active = "#666666"
+            self.theme_btn.config(text="☀️Light")
+        else:
+            bg_col = "#f0f0f0"
+            fg_col = "#000000"
+            entry_bg = "#ffffff"
+            tree_bg = "#ffffff"
+            select_bg = "#0078d7"
+            btn_bg = "#e1e1e1"
+            btn_active = "#d1d1d1"
+            self.theme_btn.config(text="🌙 Dark")
+            
+        self.root.configure(bg=bg_col)
+        
+        # Ttk styling
+        self.style.configure(".", background=bg_col, foreground=fg_col, fieldbackground=entry_bg)
+        
+        # Buttons
+        self.style.configure("TButton", background=btn_bg, foreground=fg_col)
+        self.style.map("TButton", background=[("active", btn_active)])
+        
+        # Treeview
+        self.style.configure("Treeview", background=tree_bg, foreground=fg_col, fieldbackground=tree_bg)
+        self.style.configure("Treeview.Heading", background=btn_bg, foreground=fg_col)
+        self.style.map("Treeview", background=[("selected", select_bg)], foreground=[("selected", "#ffffff")])
         
     def browse_folder(self):
         folder = filedialog.askdirectory()
@@ -99,7 +145,6 @@ class AnalyzerApp:
         self.analyze_btn.config(state=tk.DISABLED)
         self.status_var.set("Analyzing... please wait")
         
-        # Clear tree
         for item in self.tree.get_children():
             self.tree.delete(item)
             
@@ -107,7 +152,6 @@ class AnalyzerApp:
         self.filtered_items = []
         self.node_map = {}
         
-        # Run in a background thread to prevent UI freezing
         threading.Thread(target=self.analyze_directory, args=(folder,), daemon=True).start()
         
     def analyze_directory(self, target_path):
@@ -120,7 +164,6 @@ class AnalyzerApp:
         total_items = len(dir_contents)
         
         for i, item in enumerate(dir_contents):
-            # Update status occasionally
             if i % 10 == 0:
                 self.root.after(0, self.status_var.set, f"Analyzing {i}/{total_items} items...")
                 
@@ -155,8 +198,7 @@ class AnalyzerApp:
                 'IsDir': is_dir
             })
             
-        # Initial display setup
-        self.filter_var.set("") # Clear filter after a fresh load
+        self.filter_var.set("")
         self.filtered_items = list(self.items)
         self.sort_data()
         
@@ -185,7 +227,6 @@ class AnalyzerApp:
         self.sort_data()
         self.populate_tree()
         
-        # Update arrows in headings
         for c in ("Name", "Type", "Size"):
             arrow = ""
             if c == col:
@@ -205,13 +246,11 @@ class AnalyzerApp:
             self.filtered_items.sort(key=lambda x: x['SizeBytes'], reverse=self.sort_descending)
 
     def populate_tree(self):
-        # Clear current tree
         for item in self.tree.get_children():
             self.tree.delete(item)
             
         self.node_map = {}
         for item in self.filtered_items:
-            # We pad the Name with folder emoji if it's a directory
             display_name = ("\U0001F4C1 " if item['IsDir'] else "\U0001F4C4 ") + item['Name']
             node_id = self.tree.insert("", tk.END, values=(display_name, item['Type'], item['FormattedSize']))
             self.node_map[node_id] = item
@@ -225,7 +264,6 @@ class AnalyzerApp:
         if not item_id:
             return
         
-        # Get actual data from map
         item_data = self.node_map.get(item_id[0])
         if not item_data:
             return
@@ -235,10 +273,8 @@ class AnalyzerApp:
         
         try:
             if is_dir:
-                # Open directory in Windows explorer
                 os.startfile(full_path)
             else:
-                # Open containing folder pointing directly at the file
                 subprocess.run(['explorer', '/select,', os.path.normpath(full_path)])
         except Exception as e:
             messagebox.showerror("Error", f"Could not open file/folder: {e}")
@@ -258,12 +294,9 @@ class AnalyzerApp:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"report_{folder_name}_{timestamp}.json"
         
-        # Replace problematic characters
         filename = "".join(x for x in filename if x.isalnum() or x in "._- ")
-        
         report_path = os.path.join(reports_dir, filename)
         
-        # We export the filtered items to JSON (so if user shrinks list via search, it exports just that)
         to_export = []
         for item in self.filtered_items:
             to_export.append({
@@ -277,7 +310,7 @@ class AnalyzerApp:
         with open(report_path, 'w', encoding='utf-8') as f:
             json.dump(to_export, f, indent=4)
             
-        messagebox.showinfo("Export Successful", f"Report saved format as JSON successfully to:\n{report_path}")
+        messagebox.showinfo("Export Successful", f"Report saved to:\n{report_path}")
 
     def open_reports_folder(self):
         reports_dir = os.path.join(os.getcwd(), "reports")
@@ -287,13 +320,5 @@ class AnalyzerApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    
-    # Try to make Windows use a modern aesthetic theme if possible
-    style = ttk.Style()
-    if "vista" in style.theme_names():
-        style.theme_use("vista")
-    elif "clam" in style.theme_names():
-        style.theme_use("clam")
-        
     app = AnalyzerApp(root)
     root.mainloop()

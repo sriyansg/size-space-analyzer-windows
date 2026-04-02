@@ -1,10 +1,9 @@
-# This project is built entirely on the Python Standard Library!
-# Therefore, there are NO external `pip` dependencies required to run the script.
-# 
-# Pre-installed libraries utilized:
-# - os
-# - json
-# - tkinter (ttk, filedialog, messagebox)
-# - threading
-# - subprocess
-# - datetime
+# --- Requirements ---
+
+# 1. CustomTkinter (Modern Variant)
+# If you are running `analyze_modern.py`, you will need to install CustomTkinter:
+customtkinter>=5.2.2
+
+# 2. Standard Library (Classic Variant)
+# If you are running `analyze.py`, there are no external dependencies required!
+# It relies solely on built-in libraries: os, json, tkinter, threading, subprocess, datetime
