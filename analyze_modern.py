@@ -3,8 +3,6 @@ import json
 import threading
 import subprocess
 from datetime import datetime
-
-# Requires: pip install customtkinter
 import customtkinter as ctk
 
 def format_size(size):
@@ -20,9 +18,8 @@ class ModernAnalyzerApp(ctk.CTk):
         self.title("Modern Directory Analyzer")
         self.geometry("950x650")
         
-        # Set theme
-        ctk.set_appearance_mode("System")  # Modes: system (default), light, dark
-        ctk.set_default_color_theme("blue")  # Themes: blue (default), dark-blue, green
+        ctk.set_appearance_mode("System")
+        ctk.set_default_color_theme("blue")
         
         self.items = []
         self.filtered_items = []
@@ -46,7 +43,6 @@ class ModernAnalyzerApp(ctk.CTk):
         self.analyze_btn = ctk.CTkButton(top_frame, text="Analyze", command=self.start_analysis, width=100, fg_color="#2b8256", hover_color="#206341")
         self.analyze_btn.pack(side="left", padx=(0, 10))
         
-        # Appearance toggler
         self.appearance_mode_optionemenu = ctk.CTkOptionMenu(top_frame, values=["System", "Light", "Dark"],
                                                              command=self.change_appearance_mode_event, width=100)
         self.appearance_mode_optionemenu.pack(side="left")
@@ -62,19 +58,18 @@ class ModernAnalyzerApp(ctk.CTk):
         self.filter_entry = ctk.CTkEntry(mid_frame1, textvariable=self.filter_var, placeholder_text="Type to filter results by name or type...")
         self.filter_entry.pack(side="left", fill="x", expand=True)
 
-        # 3. Main Data Area (Scrollable Frame acting as a list)
+        # 3. Main Data Area
         self.scroll_frame = ctk.CTkScrollableFrame(self)
         self.scroll_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         
-        # Headers inside scroll area (fixed at top won't work perfectly in ScrollableFrame without complex code, but we keep it simple here)
         header_frame = ctk.CTkFrame(self.scroll_frame, fg_color=("gray85", "gray25"), height=30)
         header_frame.pack(fill="x", pady=(0, 5))
         
         ctk.CTkLabel(header_frame, text="Name", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=10)
+        ctk.CTkLabel(header_frame, text="Action", font=ctk.CTkFont(weight="bold")).pack(side="right", padx=(10, 15))
         ctk.CTkLabel(header_frame, text="Size", font=ctk.CTkFont(weight="bold")).pack(side="right", padx=10)
         ctk.CTkLabel(header_frame, text="Type", font=ctk.CTkFont(weight="bold")).pack(side="right", padx=80)
         
-        # Container to hold the actual rows
         self.rows_container = ctk.CTkFrame(self.scroll_frame, fg_color="transparent")
         self.rows_container.pack(fill="both", expand=True)
 
@@ -108,7 +103,6 @@ class ModernAnalyzerApp(ctk.CTk):
         self.analyze_btn.configure(state="disabled")
         self.status_var.set("Analyzing... please wait")
         
-        # Clear rows
         for widget in self.rows_container.winfo_children():
             widget.destroy()
             
@@ -127,8 +121,8 @@ class ModernAnalyzerApp(ctk.CTk):
         total_items = len(dir_contents)
         
         for i, item in enumerate(dir_contents):
-            if i % 10 == 0:
-                self.after(0, self.status_var.set, f"Analyzing {i}/{total_items} items...")
+            display_item = item if len(item) < 50 else item[:47] + "..."
+            self.after(0, self.status_var.set, f"Analyzing {i+1}/{total_items}: {display_item}")
                 
             item_path = os.path.join(target_path, item)
             size = 0
@@ -162,7 +156,7 @@ class ModernAnalyzerApp(ctk.CTk):
             })
             
         self.items.sort(key=lambda x: x['SizeBytes'], reverse=True)
-        self.after(0, self.filter_var.set, "") # will trigger population
+        self.after(0, self.filter_var.set, "")
         self.after(0, self.finish_analysis, f"Analysis complete. Found {len(self.items)} items.")
         
     def on_filter_changed(self, *args):
@@ -181,7 +175,6 @@ class ModernAnalyzerApp(ctk.CTk):
             widget.destroy()
             
         for i, item in enumerate(self.filtered_items):
-            # Alternate row colors
             bg_color = "transparent" if i % 2 == 0 else ("gray90", "gray15")
             
             row = ctk.CTkFrame(self.rows_container, fg_color=bg_color, corner_radius=0)
@@ -190,16 +183,36 @@ class ModernAnalyzerApp(ctk.CTk):
             icon = "📁" if item['IsDir'] else "📄"
             name_label = ctk.CTkLabel(row, text=f"{icon} {item['Name']}", anchor="w", cursor="hand2")
             name_label.pack(side="left", padx=10, pady=5, fill="x", expand=True)
-            
-            # Action: Open explorer when clicked
-            # Need to capture current item in lambda using default arg
             name_label.bind("<Button-1>", lambda e, path=item['FullPath'], isdir=item['IsDir']: self.open_item(path, isdir))
+            
+            # Copy & Analyze Action Button
+            copy_btn = ctk.CTkButton(row, text="📋", width=30, height=24, fg_color="transparent", hover_color=("#e0e0e0", "#444444"), text_color=("black", "white"))
+            copy_btn.pack(side="right", padx=(5, 10))
+            
+            # Hover tooltips via status bar
+            tooltip_txt = "copy this folders path to clipboard and analyse" if item['IsDir'] else "copy this files path to clipboard"
+            copy_btn.bind("<Enter>", lambda e, txt=tooltip_txt: self.status_var.set(txt))
+            copy_btn.bind("<Leave>", lambda e: self.status_var.set("Ready."))
+            
+            # Click action
+            copy_btn.configure(command=lambda path=item['FullPath'], isdir=item['IsDir']: self.copy_and_analyze(path, isdir))
             
             size_label = ctk.CTkLabel(row, text=item['FormattedSize'], width=80, anchor="e")
             size_label.pack(side="right", padx=10)
             
             type_label = ctk.CTkLabel(row, text=item['Type'], width=80, anchor="center")
             type_label.pack(side="right", padx=(10, 40))
+
+    def copy_and_analyze(self, path, is_dir):
+        self.clipboard_clear()
+        self.clipboard_append(path)
+        self.update()
+        
+        if is_dir:
+            self.path_var.set(path)
+            self.start_analysis()
+        else:
+            self.status_var.set("File path copied to clipboard!")
 
     def open_item(self, path, is_dir):
         try:
@@ -221,13 +234,19 @@ class ModernAnalyzerApp(ctk.CTk):
         reports_dir = os.path.join(os.getcwd(), "reports")
         os.makedirs(reports_dir, exist_ok=True)
         
-        folder_name = os.path.basename(os.path.normpath(self.path_var.get().strip().strip('"').strip("'")))
-        if not folder_name:
-            folder_name = "root"
+        raw_path = os.path.normpath(self.path_var.get().strip().strip('"').strip("'"))
+        _, path_tail = os.path.splitdrive(raw_path)
+        parts = [p for p in path_tail.split(os.sep) if p]
+        
+        if not parts:
+            folder_part = "root"
+        else:
+            folder_part = "-".join(parts[-4:]).lower() # e.g. desktop-game-counterstrike-videos
             
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"report_modern_{folder_name}_{timestamp}.json"
-        filename = "".join(x for x in filename if x.isalnum() or x in "._- ")
+        folder_part = "".join(x for x in folder_part if x.isalnum() or x == "-")
+            
+        timestamp = datetime.now().strftime("%H%M%S")
+        filename = f"report_modern_{folder_part}_{timestamp}.json"
         report_path = os.path.join(reports_dir, filename)
         
         with open(report_path, 'w', encoding='utf-8') as f:

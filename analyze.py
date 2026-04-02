@@ -16,7 +16,7 @@ class AnalyzerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Advanced Directory Size Analyzer")
-        self.root.geometry("900x650")
+        self.root.geometry("950x650")
         
         self.items = []
         self.filtered_items = []
@@ -26,7 +26,7 @@ class AnalyzerApp:
         self.sort_descending = True
         self.is_dark = False
         
-        # We need Tkinter variables for trace after basic root is made
+        # Tkinter variables
         self.path_var = tk.StringVar()
         self.filter_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Ready. Select a directory to begin.")
@@ -35,9 +35,8 @@ class AnalyzerApp:
         self.apply_theme("light")
         
     def setup_ui(self):
-        # We must keep references to frames so we can change their background if necessary in Tkinter
         self.style = ttk.Style()
-        self.style.theme_use('clam') # Clam is the easiest built-in theme to reskin
+        self.style.theme_use('clam')
         
         # Main structure
         self.top_frame = ttk.Frame(self.root, padding=10)
@@ -66,15 +65,21 @@ class AnalyzerApp:
         self.mid_frame = ttk.Frame(self.root, padding="10 0 10 10")
         self.mid_frame.pack(fill=tk.BOTH, expand=True)
         
-        columns = ("Name", "Type", "Size")
+        columns = ("Action", "Name", "Type", "Size")
         self.tree = ttk.Treeview(self.mid_frame, columns=columns, show="headings")
-        self.tree.bind("<Double-1>", self.on_double_click)
         
+        self.tree.bind("<Double-1>", self.on_double_click)
+        self.tree.bind("<ButtonRelease-1>", self.on_single_click)
+        self.tree.bind("<Motion>", self.on_tree_motion)
+        self.tree.bind("<Leave>", lambda e: self.status_var.set("Ready."))
+        
+        self.tree.heading("Action", text="Copy")
         self.tree.heading("Name", text="Name", command=lambda: self.sort_tree("Name"))
         self.tree.heading("Type", text="Type", command=lambda: self.sort_tree("Type"))
         self.tree.heading("Size", text="Size \u25BC", command=lambda: self.sort_tree("Size"))
         
-        self.tree.column("Name", width=500, anchor=tk.W)
+        self.tree.column("Action", width=50, anchor=tk.CENTER)
+        self.tree.column("Name", width=450, anchor=tk.W)
         self.tree.column("Type", width=120, anchor=tk.CENTER)
         self.tree.column("Size", width=120, anchor=tk.E)
         
@@ -92,6 +97,44 @@ class AnalyzerApp:
         ttk.Button(self.bottom_frame, text="Export JSON Report", command=self.export_report).pack(side=tk.RIGHT, padx=(5, 0))
         ttk.Button(self.bottom_frame, text="Open Reports Folder", command=self.open_reports_folder).pack(side=tk.RIGHT)
         
+    def copy_and_analyze(self, path, is_dir):
+        self.root.clipboard_clear()
+        self.root.clipboard_append(path)
+        self.root.update() # keep clipboard active
+        
+        if is_dir:
+            self.path_var.set(path)
+            self.start_analysis()
+        else:
+            self.status_var.set("File path copied to clipboard!")
+            
+    def on_single_click(self, event):
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "cell":
+            col = self.tree.identify_column(event.x)
+            if col == "#1": # Action column
+                item_id = self.tree.identify_row(event.y)
+                if item_id:
+                    item_data = self.node_map.get(item_id)
+                    if item_data:
+                        self.copy_and_analyze(item_data['FullPath'], item_data['IsDir'])
+
+    def on_tree_motion(self, event):
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "cell":
+            col = self.tree.identify_column(event.x)
+            if col == "#1":
+                item_id = self.tree.identify_row(event.y)
+                if item_id:
+                    item_data = self.node_map.get(item_id)
+                    if item_data:
+                        if item_data['IsDir']:
+                            self.status_var.set("copy this folders path to clipboard and analyse")
+                        else:
+                            self.status_var.set("copy this files path to clipboard")
+                        return
+        self.status_var.set("Ready.")
+
     def toggle_theme(self):
         new_mode = "light" if self.is_dark else "dark"
         self.apply_theme(new_mode)
@@ -119,14 +162,10 @@ class AnalyzerApp:
             
         self.root.configure(bg=bg_col)
         
-        # Ttk styling
         self.style.configure(".", background=bg_col, foreground=fg_col, fieldbackground=entry_bg)
-        
-        # Buttons
         self.style.configure("TButton", background=btn_bg, foreground=fg_col)
         self.style.map("TButton", background=[("active", btn_active)])
         
-        # Treeview
         self.style.configure("Treeview", background=tree_bg, foreground=fg_col, fieldbackground=tree_bg)
         self.style.configure("Treeview.Heading", background=btn_bg, foreground=fg_col)
         self.style.map("Treeview", background=[("selected", select_bg)], foreground=[("selected", "#ffffff")])
@@ -162,10 +201,10 @@ class AnalyzerApp:
             return
             
         total_items = len(dir_contents)
-        
         for i, item in enumerate(dir_contents):
-            if i % 10 == 0:
-                self.root.after(0, self.status_var.set, f"Analyzing {i}/{total_items} items...")
+            # Display current item name in the status bar
+            display_item = item if len(item) < 50 else item[:47] + "..."
+            self.root.after(0, self.status_var.set, f"Analyzing {i+1}/{total_items}: {display_item}")
                 
             item_path = os.path.join(target_path, item)
             size = 0
@@ -218,6 +257,7 @@ class AnalyzerApp:
         self.populate_tree()
 
     def sort_tree(self, col):
+        if col == "Action": return
         if self.current_sort_col == col:
             self.sort_descending = not self.sort_descending
         else:
@@ -252,7 +292,8 @@ class AnalyzerApp:
         self.node_map = {}
         for item in self.filtered_items:
             display_name = ("\U0001F4C1 " if item['IsDir'] else "\U0001F4C4 ") + item['Name']
-            node_id = self.tree.insert("", tk.END, values=(display_name, item['Type'], item['FormattedSize']))
+            action_icon = "📋"
+            node_id = self.tree.insert("", tk.END, values=(action_icon, display_name, item['Type'], item['FormattedSize']))
             self.node_map[node_id] = item
             
     def finish_analysis(self, msg):
@@ -260,6 +301,11 @@ class AnalyzerApp:
         self.analyze_btn.config(state=tk.NORMAL)
         
     def on_double_click(self, event):
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "cell":
+            col = self.tree.identify_column(event.x)
+            if col == "#1": return # Do not trigger folder open if double clicking copy
+            
         item_id = self.tree.selection()
         if not item_id:
             return
@@ -287,14 +333,21 @@ class AnalyzerApp:
         reports_dir = os.path.join(os.getcwd(), "reports")
         os.makedirs(reports_dir, exist_ok=True)
         
-        folder_name = os.path.basename(os.path.normpath(self.path_var.get().strip().strip('"').strip("'")))
-        if not folder_name:
-            folder_name = "root"
-            
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"report_{folder_name}_{timestamp}.json"
+        raw_path = os.path.normpath(self.path_var.get().strip().strip('"').strip("'"))
+        _, path_tail = os.path.splitdrive(raw_path)
+        parts = [p for p in path_tail.split(os.sep) if p]
         
-        filename = "".join(x for x in filename if x.isalnum() or x in "._- ")
+        if not parts:
+            folder_part = "root"
+        else:
+            folder_part = "-".join(parts[-4:]).lower() # e.g. desktop-game-counterstrike-videos
+            
+        # Clean string from special characters except dashes
+        folder_part = "".join(x for x in folder_part if x.isalnum() or x == "-")
+            
+        timestamp = datetime.now().strftime("%H%M%S") # short timestamp
+        filename = f"report_{folder_part}_{timestamp}.json"
+        
         report_path = os.path.join(reports_dir, filename)
         
         to_export = []
