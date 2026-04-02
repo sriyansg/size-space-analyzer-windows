@@ -1,0 +1,10 @@
+# This project is built entirely on the Python Standard Library!
+# Therefore, there are NO external `pip` dependencies required to run the script.
+# 
+# Pre-installed libraries utilized:
+# - os
+# - json
+# - tkinter (ttk, filedialog, messagebox)
+# - threading
+# - subprocess
+# - datetime
